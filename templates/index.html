@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess Framework Trading System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <div class="logo-section">
+                    <h1 class="logo">♔ Chess Trading</h1>
+                    <p class="tagline">Professional Trading Powered by Chess Strategy</p>
+                </div>
+                <div class="header-status">
+                    <div class="status-badge" id="tradingStatus">
+                        <span class="status-dot"></span>
+                        Ready
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Setup Panel -->
+            <div id="setupPanel" class="setup-panel">
+                <h2>Initialize Trading System</h2>
+                <div class="setup-form">
+                    <div class="form-group">
+                        <label>Tickers (comma-separated)</label>
+                        <input type="text" id="tickersInput" placeholder="AAPL, MSFT, GOOGL, AMZN, TSLA" value="AAPL, MSFT, GOOGL, AMZN, TSLA">
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Initial Capital ($)</label>
+                            <input type="number" id="capitalInput" value="100000" min="10000">
+                        </div>
+                        <div class="form-group">
+                            <label>Risk Level</label>
+                            <select id="riskLevelSelect">
+                                <option value="LOW">Low Risk</option>
+                                <option value="MODERATE" selected>Moderate Risk</option>
+                                <option value="HIGH">High Risk</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>MA Period</label>
+                            <input type="number" id="maPeriodInput" value="50" min="10" max="200">
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="initializeTrader()">
+                        Start Trading System
+                    </button>
+                </div>
+            </div>
+
+            <!-- Trading Dashboard -->
+            <div id="tradingDashboard" class="trading-dashboard" style="display: none;">
+                <div class="dashboard-grid">
+                    <!-- Left Panel: Board & Navigation -->
+                    <div class="left-panel">
+                        <!-- Board -->
+                        <div class="board-section">
+                            <h3>Trading Board</h3>
+                            <div class="board-info">
+                                <div class="date-display" id="dateDisplay">2023-01-03</div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" id="progressFill"></div>
+                                </div>
+                            </div>
+                            <div class="board" id="board"></div>
+                        </div>
+
+                        <!-- Navigation -->
+                        <div class="nav-controls">
+                            <button class="btn btn-nav" onclick="goToPrevDay()">← Previous</button>
+                            <button class="btn btn-primary btn-nav-main" onclick="goToNextDay()">Next Day →</button>
+                        </div>
+                    </div>
+
+                    <!-- Right Panel: Info & Controls -->
+                    <div class="right-panel">
+                        <!-- Portfolio Summary -->
+                        <div class="card portfolio-card">
+                            <h3>Portfolio Summary</h3>
+                            <div class="summary-grid">
+                                <div class="summary-item">
+                                    <span class="label">King's Cash</span>
+                                    <span class="value" id="kingCashValue">$70,000</span>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="label">Pieces Deployed</span>
+                                    <span class="value" id="piecesDeployedValue">0/15</span>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="label">Open Positions</span>
+                                    <span class="value" id="openPositionsValue">0</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Piece Inventory -->
+                        <div class="card inventory-card">
+                            <h3>Piece Inventory</h3>
+                            <div class="inventory-list" id="inventoryList">
+                                <div class="loading">Loading pieces...</div>
+                            </div>
+                        </div>
+
+                        <!-- Top Suggestions -->
+                        <div class="card suggestions-card">
+                            <h3>Top Moves</h3>
+                            <div class="suggestions-list" id="suggestionsList">
+                                <div class="loading">Analyzing positions...</div>
+                            </div>
+                        </div>
+
+                        <!-- Trade History -->
+                        <div class="card trades-card">
+                            <h3>Recent Trades</h3>
+                            <div class="trades-list" id="tradesList">
+                                <div class="empty-state">No trades yet</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="deployModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('deployModal')">&times;</span>
+            <h2>Deploy Piece</h2>
+            <div id="deployForm" class="deploy-form">
+                <!-- Dynamically populated -->
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

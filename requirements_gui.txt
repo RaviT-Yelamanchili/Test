@@ -1,0 +1,6 @@
+flask==2.3.2
+werkzeug==2.3.6
+pandas==2.0.2
+numpy==1.24.3
+yfinance==0.2.32
+tqdm==4.65.0

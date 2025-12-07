@@ -1,0 +1,97 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Chess Only</title>
+  <link rel="stylesheet" href="/static/chess_only.css">
+</head>
+<body>
+  <div id="setup-modal" class="modal-overlay">
+    <div class="modal-content">
+      <h2>Setup Your Trading Game</h2>
+      <form id="setup-form">
+        <div class="form-group">
+          <label for="tickers">Stock Universe (3-10 tickers, comma-separated)</label>
+          <input type="text" id="tickers" name="tickers" placeholder="e.g., AAPL, MSFT, GOOGL" required>
+          <small class="error-message" id="tickers-error"></small>
+        </div>
+        <div class="form-group">
+          <label for="capital">Total Simulated Capital ($)</label>
+          <input type="number" id="capital" name="capital" placeholder="100000" required>
+          <small class="error-message" id="capital-error"></small>
+        </div>
+        <div class="form-group">
+          <label for="risk-level">Risk Level</label>
+          <select id="risk-level" name="risk-level" required>
+            <option value="high">High (50% in Momentum)</option>
+            <option value="moderate" selected>Moderate (30% in Momentum)</option>
+            <option value="low">Low (10% in Momentum)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="game-duration">Game Duration</label>
+          <select id="game-duration" name="game-duration" required>
+            <option value="10">Short-Term (10-Day MA)</option>
+            <option value="20">Swing Trade (20-Day MA)</option>
+            <option value="50" selected>Medium-Term (50-Day MA)</option>
+            <option value="100">Long-Term (100-Day MA)</option>
+            <option value="200">Position Trade (200-Day MA)</option>
+          </select>
+        </div>
+        <button type="submit" class="setup-button">Start Trading</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="container" id="main-container" style="display: none;">
+    <h2 class="board-title">Momentum Trading Board</h2>
+    <div class="main-layout">
+        <div class="board-layout">
+            <div class="rank-labels">
+                <div class="label">8</div>
+                <div class="label">7</div>
+                <div class="label">6</div>
+                <div class="label">5</div>
+                <div class="label">4</div>
+                <div class="label">3</div>
+                <div class="label">2</div>
+                <div class="label">1</div>
+            </div>
+            <div class="board-grid-area">
+                <div id="board" class="board"></div>
+                <div class="file-labels">
+                    <div class="label">a</div>
+                    <div class="label">b</div>
+                    <div class="label">c</div>
+                    <div class="label">d</div>
+                    <div class="label">e</div>
+                    <div class="label">f</div>
+                    <div class="label">g</div>
+                    <div class="label">h</div>
+                </div>
+            </div>
+        </div>
+        <div class="sidebar">
+            <div id="piece-inventory" class="piece-inventory-panel">
+                <h3>Piece Inventory</h3>
+                <div id="inventory-counts"></div>
+            </div>
+            <div id="best-move-engine" class="best-move-panel">
+                <h3>Best Move Engine</h3>
+                <button id="get-suggestions-btn" class="action-button">Get Suggestions</button>
+                <ul id="suggestions-list"></ul>
+            </div>
+        </div>
+    </div>
+    <div class="controls">
+        <button id="initBtn">New Game</button>
+        <button id="undoBtn">Undo</button>
+        <div id="status"></div>
+    </div>
+  </div>
+
+  <div id="tooltip" class="tooltip" style="display: none;"></div>
+
+  <script src="/static/chess_only.js"></script>
+</body>
+</html>
