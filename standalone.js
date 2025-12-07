@@ -1,0 +1,183 @@
+// Standalone mode - uses mock data instead of backend API
+const USE_MOCK_DATA = true;
+
+const mockState = {
+  boardState: {
+    date: "2023-06-15",
+    date_idx: 123,
+    max_dates: 250,
+    phase: "OPENING",
+    king_cash: 70000,
+    pieces_deployed: 5,
+    tiles: [
+      { ticker: "AAPL", position: "A8", sos: 0.75, price: 189.45, ma: 185.20, change_pct: 2.3 },
+      { ticker: "MSFT", position: "B7", sos: 0.68, price: 330.20, ma: 328.50, change_pct: 0.5 },
+      { ticker: "GOOGL", position: "C6", sos: 0.82, price: 125.80, ma: 120.40, change_pct: 4.5 },
+      { ticker: "AMZN", position: "D5", sos: 0.55, price: 170.60, ma: 175.30, change_pct: -2.7 },
+      { ticker: "TSLA", position: "E4", sos: 0.91, price: 248.90, ma: 240.10, change_pct: 3.7 },
+    ]
+  },
+  suggestions: [
+    { ticker: "TSLA", reason: "Strong momentum signal", priority: 9.5, sos: 0.91, gain_loss: 5.2 },
+    { ticker: "GOOGL", reason: "Bullish technical setup", priority: 8.8, sos: 0.82, gain_loss: 3.1 },
+    { ticker: "AAPL", reason: "Support level bounce", priority: 7.9, sos: 0.75, gain_loss: 2.8 },
+  ]
+};
+
+async function initializeTrader() {
+  if (USE_MOCK_DATA) {
+    document.getElementById('setupPanel').style.display = 'none';
+    document.getElementById('tradingDashboard').style.display = 'block';
+    updateBoardState();
+    updatePieceInventory();
+    updateSuggestions();
+    showAlert('✓ Trading system initialized with $100,000 capital (demo mode)', 'success');
+  }
+}
+
+async function updateBoardState() {
+  const data = mockState.boardState;
+  document.getElementById('dateDisplay').textContent = data.date;
+  const progress = (data.date_idx / data.max_dates) * 100;
+  document.getElementById('progressFill').style.width = progress + '%';
+  document.getElementById('kingCashValue').textContent = '$' + data.king_cash.toLocaleString();
+  document.getElementById('piecesDeployedValue').textContent = data.pieces_deployed + '/15';
+  renderBoard(data.tiles);
+}
+
+function renderBoard(tiles) {
+  const boardEl = document.getElementById('board');
+  boardEl.innerHTML = '';
+  const squares = [];
+  for (let rank = 8; rank >= 1; rank--) {
+    for (let fileCode = 65; fileCode <= 72; fileCode++) {
+      const file = String.fromCharCode(fileCode);
+      const squareId = file + rank;
+      squares.push({ squareId, file, rank });
+    }
+  }
+  
+  const tileMap = {};
+  tiles.forEach(tile => {
+    tileMap[tile.position] = tile;
+  });
+  
+  squares.forEach(square => {
+    const tile = tileMap[square.squareId];
+    const squareEl = document.createElement('div');
+    const isWhiteSquare = (square.rank + square.file.charCodeAt(0)) % 2 === 0;
+    squareEl.className = `square ${isWhiteSquare ? 'white' : 'black'}`;
+    
+    if (tile) {
+      const isHighlight = tile.sos > 0.65;
+      if (isHighlight) squareEl.classList.add('highlight');
+      
+      const contentEl = document.createElement('div');
+      contentEl.className = 'square-content';
+      contentEl.innerHTML = `
+        <div class="square-ticker">${tile.ticker}</div>
+        <div class="square-sos">${tile.sos.toFixed(3)}</div>
+        <div class="square-price">$${tile.price.toFixed(2)}</div>
+      `;
+      squareEl.appendChild(contentEl);
+    }
+    boardEl.appendChild(squareEl);
+  });
+}
+
+async function updatePieceInventory() {
+  const pieceData = [
+    { type: 'QUEEN', count: 1, assigned: 1, total_value: 6923, pct_deployed: 100 },
+    { type: 'ROOK', count: 2, assigned: 2, total_value: 15384, pct_deployed: 100 },
+    { type: 'BISHOP', count: 2, assigned: 1, total_value: 9231, pct_deployed: 50 },
+    { type: 'KNIGHT', count: 2, assigned: 1, total_value: 6154, pct_deployed: 50 },
+    { type: 'PAWN', count: 8, assigned: 0, total_value: 49232, pct_deployed: 0 },
+  ];
+  
+  const inventoryEl = document.getElementById('inventoryList');
+  inventoryEl.innerHTML = '';
+  const pieceEmoji = { QUEEN: '♕', ROOK: '♖', BISHOP: '♗', KNIGHT: '♘', PAWN: '♙' };
+  
+  pieceData.forEach(piece => {
+    const itemEl = document.createElement('div');
+    itemEl.className = 'inventory-item';
+    itemEl.innerHTML = `
+      <div class="inventory-header">
+        <div class="piece-icon">${pieceEmoji[piece.type]}</div>
+        <div class="piece-info">
+          <h4>${piece.type}</h4>
+          <p>${piece.assigned}/${piece.count} deployed</p>
+        </div>
+      </div>
+      <div class="piece-stats">
+        <span class="piece-count">$${piece.total_value.toLocaleString()}</span>
+        <span class="piece-percentage">${piece.pct_deployed}%</span>
+      </div>
+    `;
+    inventoryEl.appendChild(itemEl);
+  });
+}
+
+async function updateSuggestions() {
+  const suggestionsEl = document.getElementById('suggestionsList');
+  suggestionsEl.innerHTML = '';
+  
+  mockState.suggestions.forEach(sugg => {
+    const itemEl = document.createElement('div');
+    itemEl.className = 'suggestion-item';
+    itemEl.innerHTML = `
+      <div class="suggestion-header">
+        <div class="suggestion-ticker">🎯 ${sugg.ticker}</div>
+        <div class="suggestion-reason">${sugg.reason}</div>
+      </div>
+      <div class="suggestion-stats">
+        <div class="suggestion-sos">SOS: ${sugg.sos.toFixed(3)}</div>
+        <div class="suggestion-priority">Priority: ${sugg.priority}</div>
+      </div>
+      <div class="suggestion-action">
+        <button class="btn btn-buy" onclick="deployPiece('${supp.ticker}')">Deploy</button>
+      </div>
+    `;
+    suggestionsEl.appendChild(itemEl);
+  });
+}
+
+async function goToNextDay() {
+  showAlert('Live trading requires backend connection', 'warning');
+}
+
+async function goToPrevDay() {
+  showAlert('Live trading requires backend connection', 'warning');
+}
+
+async function deployPiece(ticker) {
+  showAlert(`✓ Deployed piece to ${ticker}`, 'success');
+}
+
+function showAlert(message, type = 'info') {
+  const alertEl = document.createElement('div');
+  alertEl.className = `alert alert-${type}`;
+  alertEl.textContent = message;
+  alertEl.style.position = 'fixed';
+  alertEl.style.top = '100px';
+  alertEl.style.right = '20px';
+  alertEl.style.zIndex = '1001';
+  alertEl.style.maxWidth = '400px';
+  alertEl.style.animation = 'slideIn 0.3s ease';
+  document.body.appendChild(alertEl);
+  setTimeout(() => {
+    alertEl.style.animation = 'slideOut 0.3s ease';
+    setTimeout(() => alertEl.remove(), 300);
+  }, 4000);
+}
+
+function closeModal(modalId) {
+  document.getElementById(modalId).style.display = 'none';
+}
+
+window.onclick = function (event) {
+  const modal = document.getElementById('deployModal');
+  if (event.target === modal) {
+    modal.style.display = 'none';
+  }
+};
