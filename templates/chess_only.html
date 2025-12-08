@@ -4,29 +4,34 @@
   <meta charset="utf-8">
   <title>Chess Only</title>
   <link rel="stylesheet" href="/static/chess_only.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div id="setup-modal" class="modal-overlay">
     <div class="modal-content">
       <h2>Setup Your Trading Game</h2>
       <form id="setup-form">
+          <div class="form-group">
+            <label for="capital">Total Simulated Capital ($)</label>
+            <input type="number" id="capital" name="capital" placeholder="100000" required>
+            <small class="error-message" id="capital-error"></small>
+          </div>
         <div class="form-group">
-          <label for="tickers">Stock Universe (3-10 tickers, comma-separated)</label>
-          <input type="text" id="tickers" name="tickers" placeholder="e.g., AAPL, MSFT, GOOGL" required>
+          <label for="tickers">Stock Universe (1-10 symbols, comma-separated)</label>
+          <input type="text" id="tickers" name="tickers" placeholder="Example: AAPL, MSFT, GOOGL, TSLA" required>
           <small class="error-message" id="tickers-error"></small>
         </div>
-        <div class="form-group">
-          <label for="capital">Total Simulated Capital ($)</label>
-          <input type="number" id="capital" name="capital" placeholder="100000" required>
-          <small class="error-message" id="capital-error"></small>
+        <div class="form-group" id="invested-group" style="display: none;">
+          <label for="invested-amounts" id="invested-label">Capital deployed per ticker</label>
+          <input type="text" id="invested-amounts" name="invested-amounts" placeholder="Example: 20000, 15000, 10000">
+          <small class="helper-text" id="invested-helper"></small>
+          <small class="error-message" id="invested-error"></small>
         </div>
-        <div class="form-group">
-          <label for="risk-level">Risk Level</label>
-          <select id="risk-level" name="risk-level" required>
-            <option value="high">High (50% in Momentum)</option>
-            <option value="moderate" selected>Moderate (30% in Momentum)</option>
-            <option value="low">Low (10% in Momentum)</option>
-          </select>
+                <div class="form-group">
+          <label for="risk-level">Risk Allocation (%) (50% or less)</label>
+          <input type="number" id="risk-level" name="risk-level" min="0" max="50" step="1" value="30" required>
+          <small>Enter a value between 0 and 50.</small>
+          <div id="risk-error" class="error-message"></div>
         </div>
         <div class="form-group">
           <label for="game-duration">Game Duration</label>
@@ -46,40 +51,62 @@
   <div class="container" id="main-container" style="display: none;">
     <h2 class="board-title">Momentum Trading Board</h2>
     <div class="main-layout">
-        <div class="board-layout">
-            <div class="rank-labels">
-                <div class="label">8</div>
-                <div class="label">7</div>
-                <div class="label">6</div>
-                <div class="label">5</div>
-                <div class="label">4</div>
-                <div class="label">3</div>
-                <div class="label">2</div>
-                <div class="label">1</div>
-            </div>
-            <div class="board-grid-area">
-                <div id="board" class="board"></div>
-                <div class="file-labels">
-                    <div class="label">a</div>
-                    <div class="label">b</div>
-                    <div class="label">c</div>
-                    <div class="label">d</div>
-                    <div class="label">e</div>
-                    <div class="label">f</div>
-                    <div class="label">g</div>
-                    <div class="label">h</div>
-                </div>
-            </div>
-        </div>
-        <div class="sidebar">
+        <div class="side-col">
             <div id="piece-inventory" class="piece-inventory-panel">
-                <h3>Piece Inventory</h3>
+              <h3>Captured Piece Inventory</h3>
                 <div id="inventory-counts"></div>
             </div>
             <div id="best-move-engine" class="best-move-panel">
                 <h3>Best Move Engine</h3>
                 <button id="get-suggestions-btn" class="action-button">Get Suggestions</button>
                 <ul id="suggestions-list"></ul>
+            </div>
+        </div>
+
+        <div class="board-layout">
+            <div class="rank-label-container">
+                <div class="rank-label">Volatility (Low → High)</div>
+            </div>
+            <div class="board-grid-area">
+                <div class="file-label-container">
+                    <div class="file-label">Momentum (Low → High)</div>
+                </div>
+                <div class="board-wrapper">
+                  <div class="file-label-row file-top">
+                    <span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span>
+                  </div>
+                  <div class="rank-label-col rank-left">
+                    <span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span>
+                  </div>
+                  <div id="board" class="board"></div>
+                  <div class="rank-label-col rank-right">
+                    <span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span>
+                  </div>
+                  <div class="file-label-row file-bottom">
+                    <span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span>
+                  </div>
+                </div>
+                <div class="board-key">
+                <span><strong>White Square:</strong> Bullish (Price > SMA)</span>
+                <span><strong>Black Square:</strong> Bearish (Price < SMA)</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="side-col">
+            <div class="heatmap-panel">
+              <h3>Risk Heat Map</h3>
+              <canvas id="heatmapCanvas" width="240" height="240"></canvas>
+              <div class="heatmap-legend">
+                <span>Low</span>
+                <div class="heatmap-gradient"></div>
+                <span>High</span>
+              </div>
+            </div>
+            <div id="allocation-panel" class="best-move-panel">
+              <h3>Portfolio Allocation</h3>
+              <canvas id="allocationChart" width="320" height="240"></canvas>
+              <div id="allocation-note" class="small-note"></div>
             </div>
         </div>
     </div>

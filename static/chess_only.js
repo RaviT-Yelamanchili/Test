@@ -7,8 +7,12 @@ let gameConfig = {
     tickers: ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'META', 'AMD'],
     totalCapital: 100000,
     riskAllocation: 0.30, // Corresponds to 'moderate'
-    maPeriod: 50
+    maPeriod: 50,
+    investedAmounts: []
 };
+
+// Flag to control looseness of data before the first committed move
+let hasCommittedMove = false;
 
 // --- DOM Elements ---
 const modal = document.getElementById('setup-modal');
@@ -18,6 +22,15 @@ const inventoryContainer = document.getElementById('inventory-counts');
 const tooltip = document.getElementById('tooltip');
 const suggestionsBtn = document.getElementById('get-suggestions-btn');
 const suggestionsList = document.getElementById('suggestions-list');
+const allocationNote = document.getElementById('allocation-note');
+
+const tickersInput = document.getElementById('tickers');
+const investedGroup = document.getElementById('invested-group');
+const investedLabel = document.getElementById('invested-label');
+const investedHelper = document.getElementById('invested-helper');
+const investedInput = document.getElementById('invested-amounts');
+
+let allocationChartInstance = null;
 
 // Portfolio and Piece Value Configuration
 let TOTAL_PORTFOLIO_VALUE = gameConfig.totalCapital;
@@ -30,13 +43,16 @@ const piecePoints = { 'P': 1, 'N': 3, 'B': 3, 'R': 5, 'Q': 9, 'K': 0 };
 const TOTAL_MOMENTUM_POINTS = (1 * 9) + (2 * 5) + (2 * 3) + (2 * 3) + (8 * 1); // 39
 
 const blackPieceThreats = {
-  'k': { title: 'Systemic Risk' },
-  'q': { title: 'Major Market Shock' },
-  'r': { title: 'Macro Trend Shift' },
-  'b': { title: 'Thematic Decline' },
-  'n': { title: 'Volatility Event' },
-  'p': { title: 'Market Noise' }
+    'k': { title: 'Systemic Risk' },
+    'q': { title: 'Major Shock' },
+    'r': { title: 'Linear Pressure' },
+    'b': { title: 'Long-Range Pressure' },
+    'n': { title: 'Tactical Threat' },
+    'p': { title: 'Minor Risk' }
 };
+
+// Cache of latest SOS values for heat map rendering
+let lastSosGrid = null;
 
 function getPieceMonetaryValue(symbol) {
   const upperSym = symbol.toUpperCase();
@@ -68,6 +84,62 @@ function mapSymbol(sym) {
   return map[sym] || sym;
 }
 
+const chartColors = [
+    '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#EC4899', '#6366F1', '#84CC16', '#14B8A6'
+];
+
+function renderAllocationChart(tickers, amounts, totalCapital) {
+    const ctx = document.getElementById('allocationChart');
+    if (!ctx || !Array.isArray(tickers) || !Array.isArray(amounts)) return;
+
+    const totalInvested = amounts.reduce((sum, v) => sum + (isNaN(v) ? 0 : v), 0);
+
+    if (allocationChartInstance) {
+        allocationChartInstance.destroy();
+        allocationChartInstance = null;
+    }
+
+    if (totalInvested <= 0) {
+        allocationNote.textContent = 'No capital deployed yet.';
+        return;
+    }
+
+    const data = amounts.map(v => v);
+    const bg = tickers.map((_, idx) => chartColors[idx % chartColors.length]);
+
+    allocationChartInstance = new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: tickers,
+            datasets: [{
+                data: data,
+                backgroundColor: bg,
+            }]
+        },
+        options: {
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+
+    const pctOfCapital = totalCapital > 0 ? ((totalInvested / totalCapital) * 100).toFixed(1) : '0.0';
+    allocationNote.textContent = `Deployed: $${totalInvested.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} (${pctOfCapital}% of total capital)`;
+}
+
+function updateAllocationChart(deployedTickersSet) {
+    const tickers = gameConfig.tickers;
+    const invested = gameConfig.investedAmounts || [];
+
+    // Build amounts: if ticker has at least one white piece deployed, show its invested amount; otherwise 0
+    const amounts = tickers.map((t, idx) => {
+        const amt = invested[idx] || 0;
+        return deployedTickersSet.has(t) ? amt : 0;
+    });
+
+    renderAllocationChart(tickers, amounts, gameConfig.totalCapital);
+}
+
 async function init() {
   await fetch('/api/chess/init', { method: 'POST' });
   await refresh();
@@ -86,6 +158,10 @@ function renderBoard(pieces) {
   const boardEl = document.getElementById('board');
   boardEl.innerHTML = '';
   const files = ['a','b','c','d','e','f','g','h'];
+        // Prepare SOS grid for heat map rendering
+        lastSosGrid = Array.from({ length: 8 }, () => Array(8).fill(0));
+    // Track which tickers have at least one white piece deployed
+    const deployedTickers = new Set();
   for (let rank = 8; rank >= 1; rank--) {
     for (let f = 0; f < 8; f++) {
       const file = files[f];
@@ -96,10 +172,12 @@ function renderBoard(pieces) {
       sq.id = 'sq-' + pos;
 
       // --- FR-4.1: Display SOS score on each tile ---
-      const stockData = getStockDataForTile(pos);
+    const stockData = getStockDataForTile(pos, hasCommittedMove);
+            const rankIdx = 8 - rank; // 0 at top (rank 8), 7 at bottom (rank 1)
+            lastSosGrid[rankIdx][f] = stockData.sos;
       const sosDiv = document.createElement('div');
       sosDiv.className = 'sos-score';
-      sosDiv.textContent = `SOS: ${stockData.sos.toFixed(3)}`;
+    sosDiv.textContent = stockData.sosDisplay;
       sq.appendChild(sosDiv);
 
       const p = pieces.find(x => x.position === pos.toUpperCase());
@@ -120,6 +198,9 @@ function renderBoard(pieces) {
             valDiv.className = 'piece-monetary-value';
             valDiv.textContent = `$${monetaryValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
             wrap.appendChild(valDiv);
+
+            // Mark ticker as deployed for allocation chart
+            deployedTickers.add(stockData.ticker);
         } else { // Black piece
             const threat = blackPieceThreats[p.symbol.toLowerCase()];
             if (threat) {
@@ -146,18 +227,105 @@ function renderBoard(pieces) {
   }
   // --- FR-4.2: Piece Display ---
   updatePieceInventory(pieces);
+
+    // Update allocation chart based on deployed tickers
+    updateAllocationChart(deployedTickers);
+
+        // Render side heat map based on latest SOS grid
+        renderHeatmap();
 }
 
-function getStockDataForTile(pos) {
-    // This is mock data. In a real application, this would come from an API.
-    const idx = (pos.charCodeAt(0) + parseInt(pos[1], 10)) % gameConfig.tickers.length;
+function getStockDataForTile(pos, strictMode = true) {
+    // Generates opportunity (higher = better, lower risk) and price data; loose ranges (pre-first move) only appear on ranks 1-2.
+    const file = pos.charCodeAt(0) - 'a'.charCodeAt(0); // 0-7
+    const rank = parseInt(pos[1], 10) - 1; // 0-7
+    const useLooseRange = !strictMode && rank <= 1; // only rows 1-2 before first move
+
+    // Center bias for SOS
+    const dist_from_center_file = Math.min(Math.abs(file - 3), Math.abs(file - 4));
+    const dist_from_center_rank = Math.min(Math.abs(rank - 3), Math.abs(rank - 4));
+    const distance = dist_from_center_file + dist_from_center_rank;
+
+    // Opportunity higher at center (lower risk); decreases toward edges
+    let baseOpportunity = 0.75 - (distance * 0.08);
+    let opportunity = baseOpportunity + (Math.random() * 0.1 - 0.05);
+    opportunity = Math.max(0.05, Math.min(0.95, opportunity));
+    const sos = opportunity; // keep field name but treat as opportunity (higher = better)
+
+    // Price/MA mock data
+    const priceCenter = 150 + Math.random() * 100;
+    const maCenter = priceCenter * (0.9 + Math.random() * 0.15);
+
+    let sosDisplay = `SOS: ${sos.toFixed(3)}`;
+    let priceDisplay = `$${priceCenter.toFixed(2)}`;
+    let maDisplay = `$${maCenter.toFixed(2)}`;
+
+    if (useLooseRange) {
+        const sosLow = Math.max(0.05, sos - 0.05);
+        const sosHigh = Math.min(0.95, sos + 0.05);
+        sosDisplay = `SOS: ${sosLow.toFixed(3)} – ${sosHigh.toFixed(3)}`;
+
+        const priceLow = Math.max(1, priceCenter * 0.95);
+        const priceHigh = priceCenter * 1.05;
+        priceDisplay = `$${priceLow.toFixed(2)} – $${priceHigh.toFixed(2)}`;
+
+        const maLow = Math.max(1, maCenter * 0.95);
+        const maHigh = maCenter * 1.05;
+        maDisplay = `$${maLow.toFixed(2)} – $${maHigh.toFixed(2)}`;
+    }
+
+    const idx = (file + rank) % gameConfig.tickers.length;
     return {
         ticker: gameConfig.tickers[idx],
-        sos: Math.random() * 0.5 + 0.25,
-        price: 150 + Math.random() * 100,
-        ma: 145 + Math.random() * 90,
+        sos,
+        sosDisplay,
+        price: priceCenter,
+        ma: maCenter,
+        priceDisplay,
+        maDisplay,
         vix: 15 + Math.random() * 5
     };
+}
+
+function sosToColor(value) {
+    // value is opportunity (higher = better); convert to risk for color mapping
+    const opp = Math.max(0, Math.min(1, value || 0));
+    const risk = 1 - opp;
+    const hue = (1 - risk) * 120; // high opportunity -> green, low opportunity -> red
+    return `hsl(${hue}, 75%, 50%)`;
+}
+
+function renderHeatmap() {
+    const canvas = document.getElementById('heatmapCanvas');
+    if (!canvas || !lastSosGrid) return;
+    const ctx = canvas.getContext('2d');
+    const size = Math.min(canvas.width, canvas.height);
+    const cell = size / 8;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            const val = lastSosGrid[r][c] || 0;
+            ctx.fillStyle = sosToColor(val);
+            ctx.fillRect(c * cell, r * cell, cell, cell);
+        }
+    }
+
+    // Optional subtle grid lines for readability
+    ctx.strokeStyle = 'rgba(15,23,42,0.35)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 8; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * cell, 0);
+        ctx.lineTo(i * cell, size);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(0, i * cell);
+        ctx.lineTo(size, i * cell);
+        ctx.stroke();
+    }
 }
 
 function updatePieceInventory(piecesOnBoard) {
@@ -191,9 +359,9 @@ function showTileTooltip(event, pos, stockData, isDark) {
     tooltip.innerHTML = `
         <h4>${stockData.ticker} (${pos.toUpperCase()})</h4>
         <div class="tooltip-grid">
-            <span class="label">SOS Score:</span><span class="value">${stockData.sos.toFixed(3)}</span>
-            <span class="label">Price:</span><span class="value">$${stockData.price.toFixed(2)}</span>
-            <span class="label">MA (${gameConfig.maPeriod}-Day):</span><span class="value">$${stockData.ma.toFixed(2)}</span>
+            <span class="label">SOS Score:</span><span class="value">${stockData.sosDisplay || stockData.sos.toFixed(3)}</span>
+            <span class="label">Price:</span><span class="value">${stockData.priceDisplay || `$${stockData.price.toFixed(2)}`}</span>
+            <span class="label">MA (${gameConfig.maPeriod}-Day):</span><span class="value">${stockData.maDisplay || `$${stockData.ma.toFixed(2)}`}</span>
             <span class="label">Status:</span><span class="value">${status}</span>
             <span class="label">VIX Level:</span><span class="value">${stockData.vix.toFixed(2)}</span>
         </div>
@@ -244,7 +412,8 @@ async function onSquareClick(pos) {
     // successful move
     document.getElementById('sq-' + selected).classList.remove('selected');
     selected = null;
-    await refresh();
+        hasCommittedMove = true;
+        await refresh();
   } else {
     // illegal
     alert('Illegal move: ' + (data.message || ''));
@@ -322,19 +491,22 @@ setupForm.addEventListener('submit', function(e) {
     }
 
     // Process tickers
-    const tickerInput = document.getElementById('tickers').value;
-    const tickers = tickerInput.split(',').map(t => t.trim()).filter(t => t);
+    const tickerInputRaw = tickersInput.value;
+    const tickers = tickerInputRaw.split(',').map(t => t.trim()).filter(t => t);
+
+    // Process invested amounts (aligned with tickers)
+    const invested = investedInput.value.split(',').map(v => v.trim()).filter(v => v !== '').map(v => parseFloat(v));
 
     // Process risk allocation
-    const riskLevel = document.getElementById('risk-level').value;
-    const riskMap = { 'high': 0.5, 'moderate': 0.3, 'low': 0.1 };
+    const riskValue = parseFloat(document.getElementById('risk-level').value);
 
     // Update game configuration
     gameConfig = {
         tickers: tickers,
         totalCapital: parseFloat(document.getElementById('capital').value),
-        riskAllocation: riskMap[riskLevel],
-        maPeriod: parseInt(document.getElementById('game-duration').value)
+        riskAllocation: riskValue / 100, // Convert percentage to decimal
+        maPeriod: parseInt(document.getElementById('game-duration').value),
+        investedAmounts: invested
     };
 
     // Update portfolio constants
@@ -347,7 +519,9 @@ setupForm.addEventListener('submit', function(e) {
     mainContainer.style.display = 'block';
 
     // Initialize the game
-    init();
+    init().then(() => {
+        renderAllocationChart(gameConfig.tickers, gameConfig.investedAmounts, gameConfig.totalCapital);
+    });
 });
 
 function validateSetupForm() {
@@ -356,13 +530,40 @@ function validateSetupForm() {
     document.querySelectorAll('.error-message').forEach(el => el.style.display = 'none');
 
     // Validate tickers
-    const tickerInput = document.getElementById('tickers').value;
-    const tickers = tickerInput.split(',').map(t => t.trim()).filter(t => t);
+    const tickerInputVal = tickersInput.value;
+    const tickers = tickerInputVal.split(',').map(t => t.trim()).filter(t => t);
     const tickerError = document.getElementById('tickers-error');
-    if (tickers.length < 3 || tickers.length > 10) {
-        tickerError.textContent = 'Please enter between 3 and 10 ticker symbols.';
+    if (tickers.length < 1 || tickers.length > 10) {
+        tickerError.textContent = 'Please enter between 1 and 10 ticker symbols.';
         tickerError.style.display = 'block';
         isValid = false;
+    }
+
+    // Validate risk
+    const riskInput = document.getElementById('risk-level').value;
+    const riskError = document.getElementById('risk-error');
+    const riskValue = parseFloat(riskInput);
+    if (isNaN(riskValue) || riskValue < 0 || riskValue > 50) {
+        riskError.textContent = 'Please enter a number between 0 and 50.';
+        riskError.style.display = 'block';
+        isValid = false;
+    }
+
+    // Validate invested amounts
+    const investedInputVal = investedInput.value;
+    const investedError = document.getElementById('invested-error');
+    const investedPieces = investedInputVal.split(',').map(v => v.trim());
+    if (investedPieces.length !== tickers.length || investedPieces.some(v => v === '')) {
+        investedError.textContent = 'Provide one amount per ticker (same order).';
+        investedError.style.display = 'block';
+        isValid = false;
+    } else {
+        const investedNums = investedPieces.map(v => parseFloat(v));
+        if (investedNums.some(v => isNaN(v) || v < 0)) {
+            investedError.textContent = 'Amounts must be numbers ≥ 0.';
+            investedError.style.display = 'block';
+            isValid = false;
+        }
     }
 
     // Validate capital
@@ -384,3 +585,20 @@ window.onload = function() {
   // Don't auto-init anymore, wait for form submission
   // init();
 }
+
+// Dynamic invested amounts prompt: update once tickers are entered
+tickersInput.addEventListener('input', () => {
+    const tickerInputVal = tickersInput.value;
+    const tickers = tickerInputVal.split(',').map(t => t.trim()).filter(t => t);
+
+    if (tickers.length > 0) {
+        investedGroup.style.display = 'block';
+        investedLabel.textContent = `Capital per ticker (${tickers.join(', ')})`;
+        investedHelper.textContent = 'Enter amounts in the same order as your tickers.';
+    } else {
+        investedGroup.style.display = 'none';
+        investedLabel.textContent = 'Capital deployed per ticker';
+        investedHelper.textContent = '';
+        investedInput.value = '';
+    }
+});
